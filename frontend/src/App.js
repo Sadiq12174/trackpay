@@ -1,42 +1,146 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, BarElement } from 'chart.js';
-import { Line, Pie, Bar } from 'react-chartjs-2';
-import { Home, CreditCard, User, Menu, X, TrendingUp, TrendingDown, DollarSign, Calendar, Search, Filter, Download, Plus, Edit, Trash2, Bell, Settings, Shield, HelpCircle } from 'lucide-react';
+import { Line, Pie, Bar, Doughnut } from 'react-chartjs-2';
+import { Home, CreditCard, User, Menu, X, TrendingUp, TrendingDown, DollarSign, Calendar, Search, Filter, Download, Plus, Edit, Trash2, Bell, Settings, Shield, HelpCircle, Building, Wallet, RefreshCw, AlertTriangle, Eye, EyeOff, ChevronDown, Info } from 'lucide-react';
 import { format, subDays, subWeeks, subMonths, subYears, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfYear, endOfYear, isWithinInterval } from 'date-fns';
 import './App.css';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, BarElement);
 
-// Enhanced dummy data with more transactions
+// UPI Source Detection Logic
+const detectUPISource = (vpa) => {
+  if (!vpa) return { app: 'Unknown', logo: '💳' };
+  
+  const domain = vpa.split('@')[1];
+  const sourceMap = {
+    'okaxis': { app: 'PhonePe', logo: '📱', color: 'bg-purple-100 text-purple-800' },
+    'ibl': { app: 'PhonePe', logo: '📱', color: 'bg-purple-100 text-purple-800' },
+    'okhdfcbank': { app: 'Google Pay', logo: '🟢', color: 'bg-green-100 text-green-800' },
+    'ybl': { app: 'Google Pay', logo: '🟢', color: 'bg-green-100 text-green-800' },
+    'paytm': { app: 'Paytm', logo: '💙', color: 'bg-blue-100 text-blue-800' },
+    'apl': { app: 'Amazon Pay', logo: '🟠', color: 'bg-orange-100 text-orange-800' },
+    'airtel': { app: 'Airtel Money', logo: '🔴', color: 'bg-red-100 text-red-800' }
+  };
+  
+  return sourceMap[domain] || { app: 'UPI', logo: '💳', color: 'bg-gray-100 text-gray-800' };
+};
+
+// Smart merchant and transaction analyzer
+const analyzeTransaction = (description, merchant, amount) => {
+  const analysis = {
+    isRecurring: false,
+    isSalary: false,
+    isRefund: false,
+    smartCategory: null,
+    confidence: 'medium'
+  };
+  
+  const desc = description.toLowerCase();
+  const merch = merchant.toLowerCase();
+  
+  // Salary detection
+  if (amount > 0 && (desc.includes('salary') || desc.includes('sal') || merch.includes('pvt ltd') || merch.includes('technologies') || merch.includes('solutions'))) {
+    analysis.isSalary = true;
+    analysis.smartCategory = 'Salary';
+    analysis.confidence = 'high';
+  }
+  
+  // Refund detection
+  if (amount > 0 && (desc.includes('refund') || desc.includes('return') || desc.includes('reversal'))) {
+    analysis.isRefund = true;
+    analysis.smartCategory = 'Refund';
+    analysis.confidence = 'high';
+  }
+  
+  // Recurring payment detection
+  if (desc.includes('emi') || desc.includes('sip') || desc.includes('subscription') || desc.includes('monthly')) {
+    analysis.isRecurring = true;
+    analysis.confidence = 'medium';
+  }
+  
+  return analysis;
+};
+
+// Enhanced dummy data with multiple bank accounts and UPI details
+const generateBankAccounts = () => [
+  {
+    id: 1,
+    bankName: 'HDFC Bank',
+    accountNumber: '****2341',
+    accountType: 'Savings',
+    balance: 45000,
+    label: 'Salary Account',
+    isPrimary: true,
+    lastUpdated: new Date(),
+    lowBalanceAlert: 5000
+  },
+  {
+    id: 2,
+    bankName: 'SBI Bank',
+    accountNumber: '****7892',
+    accountType: 'Current',
+    balance: 28000,
+    label: 'Business Account',
+    isPrimary: false,
+    lastUpdated: new Date(),
+    lowBalanceAlert: 10000
+  },
+  {
+    id: 3,
+    bankName: 'ICICI Bank',
+    accountNumber: '****5634',
+    accountType: 'Savings',
+    balance: 12000,
+    label: 'Personal Savings',
+    isPrimary: false,
+    lastUpdated: new Date(),
+    lowBalanceAlert: 2000
+  }
+];
+
 const generateDummyTransactions = () => {
   const transactions = [];
   const categories = ['Food & Dining', 'Transportation', 'Shopping', 'Bills & Utilities', 'Entertainment', 'Healthcare', 'Investment', 'Income', 'Groceries', 'Education'];
-  const merchants = ['Zomato', 'Swiggy', 'Uber', 'Ola', 'Amazon', 'Flipkart', 'Netflix', 'Spotify', 'Big Bazaar', 'Metro', 'Petrol Pump', 'Pharmacy', 'BookMyShow', 'Gym', 'Starbucks'];
-  const sources = ['PhonePe', 'Google Pay', 'Paytm', 'HDFC Credit Card', 'SBI Credit Card', 'ICICI Credit Card', 'HDFC Bank', 'SBI Bank', 'ICICI Bank', 'Paytm Wallet', 'Amazon Pay'];
+  const merchants = ['Zomato', 'Swiggy', 'Uber', 'Ola', 'Amazon', 'Flipkart', 'Netflix', 'Spotify', 'Big Bazaar', 'Metro', 'Petrol Pump', 'Pharmacy', 'BookMyShow', 'Gym', 'Starbucks', 'IRCTC', 'Infosys Pvt Ltd', 'TCS Technologies', 'Google India'];
+  const banks = ['HDFC Bank', 'SBI Bank', 'ICICI Bank'];
+  const upiVPAs = ['user@ybl', 'user@okaxis', 'user@paytm', 'user@apl', 'user@okhdfcbank'];
   const types = ['UPI', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Wallet'];
 
-  // Generate 50+ transactions over last 3 months
-  for (let i = 0; i < 60; i++) {
+  // Generate 80+ transactions over last 3 months
+  for (let i = 0; i < 80; i++) {
     const daysAgo = Math.floor(Math.random() * 90);
     const date = subDays(new Date(), daysAgo);
-    const isIncome = Math.random() < 0.15; // 15% chance of income
+    const isIncome = Math.random() < 0.15;
     const amount = isIncome ? 
       Math.floor(Math.random() * 50000) + 5000 : 
       -(Math.floor(Math.random() * 5000) + 50);
     
-    transactions.push({
+    const type = types[Math.floor(Math.random() * types.length)];
+    const merchant = isIncome ? 'Salary Credit' : merchants[Math.floor(Math.random() * merchants.length)];
+    const bank = banks[Math.floor(Math.random() * banks.length)];
+    const vpa = type === 'UPI' ? upiVPAs[Math.floor(Math.random() * upiVPAs.length)] : null;
+    
+    const transaction = {
       id: i + 1,
       date: format(date, 'yyyy-MM-dd'),
       amount,
-      type: types[Math.floor(Math.random() * types.length)],
-      source: sources[Math.floor(Math.random() * sources.length)],
-      merchant: isIncome ? 'Salary Credit' : merchants[Math.floor(Math.random() * merchants.length)],
+      type,
+      source: type === 'UPI' ? `UPI - ${bank}` : `${type} - ${bank}`,
+      merchant,
       category: isIncome ? 'Income' : categories[Math.floor(Math.random() * (categories.length - 1))],
       status: 'Success',
-      description: isIncome ? 'Monthly salary' : `Payment to ${merchants[Math.floor(Math.random() * merchants.length)]}`,
-      tags: []
-    });
+      description: isIncome ? 'Monthly salary payment' : `Payment to ${merchant}`,
+      tags: [],
+      bankAccount: bank,
+      upiVPA: vpa,
+      upiSource: vpa ? detectUPISource(vpa) : null
+    };
+    
+    // Add smart analysis
+    transaction.analysis = analyzeTransaction(transaction.description, transaction.merchant, transaction.amount);
+    
+    transactions.push(transaction);
   }
   
   return transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -58,6 +162,7 @@ const Navigation = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenu
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-blue-600">TrackPay</h1>
+            <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Pro</span>
           </div>
           
           {/* Desktop Navigation */}
@@ -122,11 +227,12 @@ const Navigation = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenu
   );
 };
 
-// Dashboard Component
-const Dashboard = ({ transactions }) => {
+// Enhanced Dashboard Component with Account Insights
+const Dashboard = ({ transactions, bankAccounts }) => {
   const [timeFilter, setTimeFilter] = useState('month');
+  const [selectedAccount, setSelectedAccount] = useState('All');
   
-  const getFilteredTransactions = (filter) => {
+  const getFilteredTransactions = (filter, account = 'All') => {
     const now = new Date();
     let startDate, endDate;
     
@@ -147,12 +253,18 @@ const Dashboard = ({ transactions }) => {
         return transactions;
     }
     
-    return transactions.filter(t => 
+    let filtered = transactions.filter(t => 
       isWithinInterval(new Date(t.date), { start: startDate, end: endDate })
     );
+    
+    if (account !== 'All') {
+      filtered = filtered.filter(t => t.bankAccount === account);
+    }
+    
+    return filtered;
   };
 
-  const filteredTransactions = getFilteredTransactions(timeFilter);
+  const filteredTransactions = getFilteredTransactions(timeFilter, selectedAccount);
   
   const analytics = useMemo(() => {
     const income = filteredTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
@@ -165,6 +277,30 @@ const Dashboard = ({ transactions }) => {
       if (t.amount < 0) {
         acc[t.category] = (acc[t.category] || 0) + Math.abs(t.amount);
       }
+      return acc;
+    }, {});
+    
+    // UPI App insights
+    const upiInsights = filteredTransactions
+      .filter(t => t.upiSource)
+      .reduce((acc, t) => {
+        const app = t.upiSource.app;
+        if (!acc[app]) acc[app] = { count: 0, amount: 0 };
+        acc[app].count++;
+        acc[app].amount += Math.abs(t.amount);
+        return acc;
+      }, {});
+    
+    // Account-wise breakdown
+    const accountBreakdown = filteredTransactions.reduce((acc, t) => {
+      const account = t.bankAccount;
+      if (!acc[account]) acc[account] = { income: 0, expenses: 0, count: 0 };
+      if (t.amount > 0) {
+        acc[account].income += t.amount;
+      } else {
+        acc[account].expenses += Math.abs(t.amount);
+      }
+      acc[account].count++;
       return acc;
     }, {});
     
@@ -182,7 +318,7 @@ const Dashboard = ({ transactions }) => {
       }
     });
     
-    return { income, expenses, transactionCount, incomeCount, expenseCount, categoryTotals, monthlyData };
+    return { income, expenses, transactionCount, incomeCount, expenseCount, categoryTotals, monthlyData, upiInsights, accountBreakdown };
   }, [filteredTransactions, transactions]);
 
   // Chart data
@@ -220,6 +356,22 @@ const Dashboard = ({ transactions }) => {
     ]
   };
 
+  const accountsData = {
+    labels: Object.keys(analytics.accountBreakdown),
+    datasets: [
+      {
+        label: 'Expenses',
+        data: Object.values(analytics.accountBreakdown).map(d => d.expenses),
+        backgroundColor: '#EF4444',
+      },
+      {
+        label: 'Income',
+        data: Object.values(analytics.accountBreakdown).map(d => d.income),
+        backgroundColor: '#10B981',
+      }
+    ]
+  };
+
   const chartOptions = {
     responsive: true,
     plugins: {
@@ -234,37 +386,71 @@ const Dashboard = ({ transactions }) => {
     },
   };
 
+  const totalBalance = bankAccounts.reduce((sum, account) => sum + account.balance, 0);
+  const lowBalanceAccounts = bankAccounts.filter(account => account.balance <= account.lowBalanceAlert);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
+        {/* Header with Balance Overview */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Financial Dashboard</h1>
-          <p className="text-gray-600">Track your income, expenses, and financial trends</p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Financial Dashboard</h1>
+              <p className="text-gray-600">Track your income, expenses, and financial trends</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-600">Total Balance Across All Accounts</p>
+              <p className="text-3xl font-bold text-green-600">₹{totalBalance.toLocaleString()}</p>
+              {lowBalanceAccounts.length > 0 && (
+                <div className="flex items-center text-red-600 text-sm mt-1">
+                  <AlertTriangle className="w-4 h-4 mr-1" />
+                  {lowBalanceAccounts.length} account(s) low balance
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Time Filter */}
+        {/* Filters */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <div className="flex flex-wrap gap-4">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Time Period</h3>
-            <div className="flex space-x-2">
-              {[
-                { key: 'week', label: 'This Week' },
-                { key: 'month', label: 'This Month' },
-                { key: 'year', label: 'This Year' }
-              ].map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => setTimeFilter(key)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    timeFilter === key
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Time Period</h3>
+              <div className="flex space-x-2">
+                {[
+                  { key: 'week', label: 'This Week' },
+                  { key: 'month', label: 'This Month' },
+                  { key: 'year', label: 'This Year' }
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setTimeFilter(key)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      timeFilter === key
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Account Filter</h3>
+              <select
+                value={selectedAccount}
+                onChange={(e) => setSelectedAccount(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="All">All Accounts</option>
+                {bankAccounts.map(account => (
+                  <option key={account.id} value={account.bankName}>
+                    {account.bankName} ({account.label})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -322,6 +508,33 @@ const Dashboard = ({ transactions }) => {
           </div>
         </div>
 
+        {/* UPI Insights */}
+        {Object.keys(analytics.upiInsights).length > 0 && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">UPI App Insights</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {Object.entries(analytics.upiInsights).map(([app, data]) => (
+                <div key={app} className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <span className="text-2xl mr-2">
+                        {app === 'Google Pay' ? '🟢' : app === 'PhonePe' ? '📱' : app === 'Paytm' ? '💙' : '💳'}
+                      </span>
+                      <div>
+                        <h4 className="font-medium text-gray-800">{app}</h4>
+                        <p className="text-sm text-gray-600">{data.count} transactions</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-gray-800">₹{data.amount.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {/* Income vs Expenses Trend */}
@@ -335,6 +548,40 @@ const Dashboard = ({ transactions }) => {
             <h3 className="text-xl font-bold text-gray-800 mb-4">Expense Categories</h3>
             <div className="h-64">
               <Pie data={pieChartData} options={{ responsive: true, maintainAspectRatio: false }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Account-wise Analysis */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Account-wise Breakdown</h3>
+            <Bar data={accountsData} options={chartOptions} />
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Account Performance</h3>
+            <div className="space-y-4">
+              {Object.entries(analytics.accountBreakdown).map(([account, data]) => (
+                <div key={account} className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-medium text-gray-800">{account}</h4>
+                    <span className="text-sm text-gray-600">{data.count} transactions</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-green-600">Income: ₹{data.income.toLocaleString()}</span>
+                    <span className="text-red-600">Expenses: ₹{data.expenses.toLocaleString()}</span>
+                  </div>
+                  <div className="mt-2">
+                    <div className="bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full" 
+                        style={{ width: `${(data.expenses / analytics.expenses) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -372,14 +619,14 @@ const Dashboard = ({ transactions }) => {
   );
 };
 
-// Transactions Component
-const Transactions = ({ transactions, setTransactions }) => {
+// Enhanced Transactions Component with UPI Source Detection
+const Transactions = ({ transactions, setTransactions, bankAccounts }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
+  const [selectedAccount, setSelectedAccount] = useState('All');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [showFilters, setShowFilters] = useState(true);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(transaction => {
@@ -387,6 +634,7 @@ const Transactions = ({ transactions, setTransactions }) => {
                           transaction.description.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = selectedCategory === 'All' || transaction.category === selectedCategory;
       const matchesType = selectedType === 'All' || transaction.type === selectedType;
+      const matchesAccount = selectedAccount === 'All' || transaction.bankAccount === selectedAccount;
       
       let matchesDateRange = true;
       if (dateRange.from && dateRange.to) {
@@ -396,9 +644,9 @@ const Transactions = ({ transactions, setTransactions }) => {
         matchesDateRange = transactionDate >= fromDate && transactionDate <= toDate;
       }
       
-      return matchesSearch && matchesCategory && matchesType && matchesDateRange;
+      return matchesSearch && matchesCategory && matchesType && matchesAccount && matchesDateRange;
     });
-  }, [transactions, searchTerm, selectedCategory, selectedType, dateRange]);
+  }, [transactions, searchTerm, selectedCategory, selectedType, selectedAccount, dateRange]);
 
   const categories = ['All', ...new Set(transactions.map(t => t.category))];
   const types = ['All', ...new Set(transactions.map(t => t.type))];
@@ -410,7 +658,7 @@ const Transactions = ({ transactions, setTransactions }) => {
   };
 
   const exportToCSV = () => {
-    const headers = ['Date', 'Merchant', 'Amount', 'Type', 'Category', 'Description'];
+    const headers = ['Date', 'Merchant', 'Amount', 'Type', 'Category', 'Account', 'UPI Source', 'Description'];
     const csvData = [
       headers.join(','),
       ...filteredTransactions.map(t => [
@@ -419,6 +667,8 @@ const Transactions = ({ transactions, setTransactions }) => {
         t.amount,
         t.type,
         t.category,
+        t.bankAccount,
+        t.upiSource?.app || 'N/A',
         t.description
       ].join(','))
     ].join('\n');
@@ -438,9 +688,16 @@ const Transactions = ({ transactions, setTransactions }) => {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Transactions</h1>
-            <p className="text-gray-600">Manage and track all your financial transactions</p>
+            <p className="text-gray-600">Manage and track all your financial transactions across accounts</p>
           </div>
           <div className="flex space-x-3">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
+            >
+              <Filter className="w-4 h-4 mr-2" />
+              {showFilters ? 'Hide' : 'Show'} Filters
+            </button>
             <button
               onClick={exportToCSV}
               className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center"
@@ -448,10 +705,7 @@ const Transactions = ({ transactions, setTransactions }) => {
               <Download className="w-4 h-4 mr-2" />
               Export CSV
             </button>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-            >
+            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center">
               <Plus className="w-4 h-4 mr-2" />
               Add Transaction
             </button>
@@ -459,84 +713,103 @@ const Transactions = ({ transactions, setTransactions }) => {
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+        {showFilters && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search transactions..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Account</label>
+                <select
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={selectedAccount}
+                  onChange={(e) => setSelectedAccount(e.target.value)}
+                >
+                  <option value="All">All Accounts</option>
+                  {bankAccounts.map(account => (
+                    <option key={account.id} value={account.bankName}>
+                      {account.bankName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                <select
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                >
+                  {categories.map(category => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                <select
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value)}
+                >
+                  {types.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">From Date</label>
                 <input
-                  type="text"
-                  placeholder="Search transactions..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  type="date"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={dateRange.from}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">To Date</label>
+                <input
+                  type="date"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={dateRange.to}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-              <select
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedCategory('All');
+                  setSelectedType('All');
+                  setSelectedAccount('All');
+                  setDateRange({ from: '', to: '' });
+                }}
+                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
               >
-                {categories.map(category => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-              <select
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
-              >
-                {types.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">From Date</label>
-              <input
-                type="date"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={dateRange.from}
-                onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">To Date</label>
-              <input
-                type="date"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={dateRange.to}
-                onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-              />
+                <Filter className="w-4 h-4 mr-2" />
+                Reset Filters
+              </button>
             </div>
           </div>
-
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setSelectedCategory('All');
-                setSelectedType('All');
-                setDateRange({ from: '', to: '' });
-              }}
-              className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center"
-            >
-              <Filter className="w-4 h-4 mr-2" />
-              Reset Filters
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* Transactions Table */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -552,6 +825,7 @@ const Transactions = ({ transactions, setTransactions }) => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Merchant</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -564,19 +838,51 @@ const Transactions = ({ transactions, setTransactions }) => {
                       {format(new Date(transaction.date), 'dd MMM yyyy')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{transaction.merchant}</div>
+                      <div className="text-sm font-medium text-gray-900 flex items-center">
+                        {transaction.merchant}
+                        {transaction.analysis?.isSalary && (
+                          <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                            💼 Salary
+                          </span>
+                        )}
+                        {transaction.analysis?.isRefund && (
+                          <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                            🔄 Refund
+                          </span>
+                        )}
+                        {transaction.analysis?.isRecurring && (
+                          <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                            🔁 Recurring
+                          </span>
+                        )}
+                      </div>
                       <div className="text-sm text-gray-500">{transaction.description}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        transaction.type === 'UPI' ? 'bg-green-100 text-green-800' :
-                        transaction.type === 'Credit Card' ? 'bg-blue-100 text-blue-800' :
-                        transaction.type === 'Bank Transfer' ? 'bg-purple-100 text-purple-800' :
-                        transaction.type === 'Wallet' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {transaction.type}
-                      </span>
+                      <div className="flex items-center">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          transaction.type === 'UPI' ? 'bg-green-100 text-green-800' :
+                          transaction.type === 'Credit Card' ? 'bg-blue-100 text-blue-800' :
+                          transaction.type === 'Bank Transfer' ? 'bg-purple-100 text-purple-800' :
+                          transaction.type === 'Wallet' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {transaction.type}
+                        </span>
+                        {transaction.upiSource && (
+                          <div className="ml-2 group relative">
+                            <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${transaction.upiSource.color}`}>
+                              {transaction.upiSource.logo} {transaction.upiSource.app}
+                            </span>
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 text-xs text-white bg-gray-800 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                              Source detected: {transaction.upiSource.app} ({transaction.upiVPA})
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {transaction.bankAccount}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {transaction.category}
@@ -589,16 +895,23 @@ const Transactions = ({ transactions, setTransactions }) => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex space-x-2">
                         <button
-                          onClick={() => setEditingTransaction(transaction)}
+                          title="Edit Transaction"
                           className="text-blue-600 hover:text-blue-800 transition-colors"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
+                          title="Delete Transaction"
                           onClick={() => handleDeleteTransaction(transaction.id)}
                           className="text-red-600 hover:text-red-800 transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="View Details"
+                          className="text-gray-600 hover:text-gray-800 transition-colors"
+                        >
+                          <Info className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -613,8 +926,8 @@ const Transactions = ({ transactions, setTransactions }) => {
   );
 };
 
-// Profile Component
-const Profile = () => {
+// Enhanced Profile Component with Bank Account Management
+const Profile = ({ bankAccounts, setBankAccounts }) => {
   const [userInfo, setUserInfo] = useState({
     name: 'John Doe',
     email: 'john.doe@example.com',
@@ -627,16 +940,55 @@ const Profile = () => {
     daily: true,
     weekly: true,
     monthly: false,
-    marketing: false
+    marketing: false,
+    lowBalance: true
   });
+
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [balanceVisibility, setBalanceVisibility] = useState({});
+  const [refreshing, setRefreshing] = useState({});
+
+  const handleRefreshBalance = async (accountId) => {
+    setRefreshing(prev => ({ ...prev, [accountId]: true }));
+    
+    // Simulate API call
+    setTimeout(() => {
+      setBankAccounts(prev => prev.map(account => 
+        account.id === accountId 
+          ? { ...account, balance: account.balance + Math.floor(Math.random() * 1000) - 500, lastUpdated: new Date() }
+          : account
+      ));
+      setRefreshing(prev => ({ ...prev, [accountId]: false }));
+    }, 2000);
+  };
+
+  const handleSetPrimary = (accountId) => {
+    setBankAccounts(prev => prev.map(account => ({
+      ...account,
+      isPrimary: account.id === accountId
+    })));
+  };
+
+  const handleDeleteAccount = (accountId) => {
+    if (window.confirm('Are you sure you want to remove this bank account?')) {
+      setBankAccounts(prev => prev.filter(account => account.id !== accountId));
+    }
+  };
+
+  const toggleBalanceVisibility = (accountId) => {
+    setBalanceVisibility(prev => ({ ...prev, [accountId]: !prev[accountId] }));
+  };
+
+  const totalBalance = bankAccounts.reduce((sum, account) => sum + account.balance, 0);
+  const lowBalanceAccounts = bankAccounts.filter(account => account.balance <= account.lowBalanceAlert);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Profile Settings</h1>
-          <p className="text-gray-600">Manage your account information and preferences</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Profile & Account Management</h1>
+          <p className="text-gray-600">Manage your personal information and bank accounts</p>
         </div>
 
         {/* Profile Information */}
@@ -693,6 +1045,120 @@ const Profile = () => {
           </div>
         </div>
 
+        {/* Bank Accounts Management */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                <Building className="w-5 h-5 mr-2" />
+                Bank Accounts ({bankAccounts.length})
+              </h3>
+              <p className="text-gray-600">Total Balance: ₹{totalBalance.toLocaleString()}</p>
+              {lowBalanceAccounts.length > 0 && (
+                <div className="flex items-center text-red-600 text-sm mt-1">
+                  <AlertTriangle className="w-4 h-4 mr-1" />
+                  {lowBalanceAccounts.length} account(s) have low balance alerts
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setShowAddAccount(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Account
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {bankAccounts.map((account) => (
+              <div key={account.id} className={`relative bg-gradient-to-r ${
+                account.isPrimary 
+                  ? 'from-blue-500 to-blue-700 text-white' 
+                  : 'from-gray-100 to-gray-200 text-gray-800'
+              } rounded-xl p-6 shadow-lg`}>
+                {account.isPrimary && (
+                  <div className="absolute top-2 right-2">
+                    <span className="bg-white text-blue-600 text-xs px-2 py-1 rounded-full font-semibold">
+                      PRIMARY
+                    </span>
+                  </div>
+                )}
+                
+                <div className="mb-4">
+                  <h4 className="font-bold text-lg">{account.bankName}</h4>
+                  <p className={`text-sm ${account.isPrimary ? 'text-blue-100' : 'text-gray-600'}`}>
+                    {account.accountNumber} • {account.accountType}
+                  </p>
+                  <p className={`text-xs ${account.isPrimary ? 'text-blue-200' : 'text-gray-500'}`}>
+                    {account.label}
+                  </p>
+                </div>
+
+                <div className="mb-4">
+                  <div className="flex items-center justify-between">
+                    <span className={`text-sm ${account.isPrimary ? 'text-blue-100' : 'text-gray-600'}`}>
+                      Available Balance
+                    </span>
+                    <button
+                      onClick={() => toggleBalanceVisibility(account.id)}
+                      className={`${account.isPrimary ? 'text-blue-100 hover:text-white' : 'text-gray-600 hover:text-gray-800'} transition-colors`}
+                    >
+                      {balanceVisibility[account.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-2xl font-bold">
+                    {balanceVisibility[account.id] ? '••••••' : `₹${account.balance.toLocaleString()}`}
+                  </p>
+                  <p className={`text-xs ${account.isPrimary ? 'text-blue-200' : 'text-gray-500'}`}>
+                    Updated {format(account.lastUpdated, 'dd MMM, HH:mm')}
+                  </p>
+                </div>
+
+                {account.balance <= account.lowBalanceAlert && (
+                  <div className="mb-3 flex items-center text-yellow-300 text-sm">
+                    <AlertTriangle className="w-4 h-4 mr-1" />
+                    Low balance alert
+                  </div>
+                )}
+
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleRefreshBalance(account.id)}
+                    disabled={refreshing[account.id]}
+                    className={`flex-1 ${
+                      account.isPrimary 
+                        ? 'bg-white text-blue-600 hover:bg-blue-50' 
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    } px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center`}
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-1 ${refreshing[account.id] ? 'animate-spin' : ''}`} />
+                    {refreshing[account.id] ? 'Updating...' : 'Refresh'}
+                  </button>
+                  
+                  {!account.isPrimary && (
+                    <button
+                      onClick={() => handleSetPrimary(account.id)}
+                      className="px-3 py-2 border border-gray-400 rounded-lg text-sm hover:bg-gray-300 transition-colors"
+                      title="Set as Primary"
+                    >
+                      Primary
+                    </button>
+                  )}
+                  
+                  <button
+                    onClick={() => handleDeleteAccount(account.id)}
+                    className="px-3 py-2 border border-red-400 text-red-600 rounded-lg text-sm hover:bg-red-50 transition-colors"
+                    title="Remove Account"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Notification Preferences */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
           <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
@@ -704,6 +1170,7 @@ const Profile = () => {
               { key: 'daily', label: 'Daily Summary', description: 'Get daily transaction summaries' },
               { key: 'weekly', label: 'Weekly Reports', description: 'Receive weekly financial reports' },
               { key: 'monthly', label: 'Monthly Analytics', description: 'Monthly spending analysis and insights' },
+              { key: 'lowBalance', label: 'Low Balance Alerts', description: 'Get notified when account balance is low' },
               { key: 'marketing', label: 'Marketing Updates', description: 'Product updates and promotional offers' }
             ].map(({ key, label, description }) => (
               <div key={key} className="flex items-center justify-between">
@@ -745,7 +1212,16 @@ const Profile = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium text-gray-900">Two-Factor Authentication</h4>
-                  <p className="text-sm text-gray-600">Add an extra layer of security</p>
+                  <p className="text-sm text-gray-600">Add an extra layer of security to your account</p>
+                </div>
+                <Settings className="w-5 h-5 text-gray-400" />
+              </div>
+            </button>
+            <button className="w-full text-left bg-gray-50 hover:bg-gray-100 p-4 rounded-lg transition-colors">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium text-gray-900">Connected Apps</h4>
+                  <p className="text-sm text-gray-600">Manage connected UPI apps and bank integrations</p>
                 </div>
                 <Settings className="w-5 h-5 text-gray-400" />
               </div>
@@ -762,11 +1238,19 @@ const Profile = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button className="text-left bg-gray-50 hover:bg-gray-100 p-4 rounded-lg transition-colors">
               <h4 className="font-medium text-gray-900">Help Center</h4>
-              <p className="text-sm text-gray-600">Find answers to common questions</p>
+              <p className="text-sm text-gray-600">Find answers to common questions about account management</p>
             </button>
             <button className="text-left bg-gray-50 hover:bg-gray-100 p-4 rounded-lg transition-colors">
               <h4 className="font-medium text-gray-900">Contact Support</h4>
               <p className="text-sm text-gray-600">Get help from our support team</p>
+            </button>
+            <button className="text-left bg-gray-50 hover:bg-gray-100 p-4 rounded-lg transition-colors">
+              <h4 className="font-medium text-gray-900">Bank Integration Guide</h4>
+              <p className="text-sm text-gray-600">Learn how to safely connect your bank accounts</p>
+            </button>
+            <button className="text-left bg-gray-50 hover:bg-gray-100 p-4 rounded-lg transition-colors">
+              <h4 className="font-medium text-gray-900">Privacy & Security</h4>
+              <p className="text-sm text-gray-600">Understand how we protect your financial data</p>
             </button>
           </div>
         </div>
@@ -778,12 +1262,14 @@ const Profile = () => {
 // Main App Component
 const App = () => {
   const [transactions, setTransactions] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     setTimeout(() => {
       setTransactions(generateDummyTransactions());
+      setBankAccounts(generateBankAccounts());
       setIsLoading(false);
     }, 1000);
   }, []);
@@ -793,7 +1279,8 @@ const App = () => {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">Loading TrackPay...</p>
+          <p className="text-lg text-gray-600">Loading TrackPay Pro...</p>
+          <p className="text-sm text-gray-500 mt-2">Syncing your financial data across all accounts</p>
         </div>
       </div>
     );
@@ -807,9 +1294,9 @@ const App = () => {
           setIsMobileMenuOpen={setIsMobileMenuOpen}
         />
         <Routes>
-          <Route path="/" element={<Dashboard transactions={transactions} />} />
-          <Route path="/transactions" element={<Transactions transactions={transactions} setTransactions={setTransactions} />} />
-          <Route path="/profile" element={<Profile />} />
+          <Route path="/" element={<Dashboard transactions={transactions} bankAccounts={bankAccounts} />} />
+          <Route path="/transactions" element={<Transactions transactions={transactions} setTransactions={setTransactions} bankAccounts={bankAccounts} />} />
+          <Route path="/profile" element={<Profile bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} />} />
         </Routes>
       </div>
     </Router>
