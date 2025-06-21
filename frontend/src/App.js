@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, BarElement } from 'chart.js';
 import { Line, Pie, Bar, Doughnut } from 'react-chartjs-2';
-import { Home, CreditCard, User, Menu, X, TrendingUp, TrendingDown, DollarSign, Calendar, Search, Filter, Download, Plus, Edit, Trash2, Bell, Settings, Shield, HelpCircle, Building, Wallet, RefreshCw, AlertTriangle, Eye, EyeOff, ChevronDown, Info } from 'lucide-react';
+import { Home, CreditCard, User, Menu, X, TrendingUp, TrendingDown, DollarSign, Calendar, Search, Filter, Download, Plus, Edit, Trash2, Bell, Settings, Shield, HelpCircle, Building, Wallet, RefreshCw, AlertTriangle, Eye, EyeOff, ChevronDown, Info, Check, ArrowRight, PlayCircle, UserPlus, LogIn } from 'lucide-react';
 import { format, subDays, subWeeks, subMonths, subYears, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfYear, endOfYear, isWithinInterval } from 'date-fns';
 import './App.css';
 
@@ -62,40 +62,64 @@ const analyzeTransaction = (description, merchant, amount) => {
   return analysis;
 };
 
+// PAN Card Validation
+const validatePAN = (pan) => {
+  const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+  return panRegex.test(pan);
+};
+
 // Enhanced dummy data with multiple bank accounts and UPI details
 const generateBankAccounts = () => [
   {
     id: 1,
     bankName: 'HDFC Bank',
     accountNumber: '****2341',
+    fullAccountNumber: '50200012345432341',
+    ifscCode: 'HDFC0001234',
     accountType: 'Savings',
     balance: 45000,
     label: 'Salary Account',
     isPrimary: true,
     lastUpdated: new Date(),
-    lowBalanceAlert: 5000
+    lowBalanceAlert: 5000,
+    panCard: 'ABCDE1234F',
+    accountHolderName: 'John Doe',
+    mobileNumber: '+91 9876543210',
+    emailId: 'john.doe@example.com'
   },
   {
     id: 2,
     bankName: 'SBI Bank',
     accountNumber: '****7892',
+    fullAccountNumber: '12345678907892',
+    ifscCode: 'SBIN0001234',
     accountType: 'Current',
     balance: 28000,
     label: 'Business Account',
     isPrimary: false,
     lastUpdated: new Date(),
-    lowBalanceAlert: 10000
+    lowBalanceAlert: 10000,
+    panCard: 'ABCDE1234F',
+    accountHolderName: 'John Doe',
+    mobileNumber: '+91 9876543210',
+    emailId: 'john.doe@example.com'
   },
   {
     id: 3,
     bankName: 'ICICI Bank',
     accountNumber: '****5634',
+    fullAccountNumber: '123456789056634',
+    ifscCode: 'ICIC0001234',
     accountType: 'Savings',
     balance: 12000,
     label: 'Personal Savings',
     isPrimary: false,
     lastUpdated: new Date(),
-    lowBalanceAlert: 2000
+    lowBalanceAlert: 2000,
+    panCard: 'ABCDE1234F',
+    accountHolderName: 'John Doe',
+    mobileNumber: '+91 9876543210',
+    emailId: 'john.doe@example.com'
   }
 ];
 
@@ -146,8 +170,626 @@ const generateDummyTransactions = () => {
   return transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
 };
 
+// Add Account Modal Component
+const AddAccountModal = ({ isOpen, onClose, onAddAccount }) => {
+  const [formData, setFormData] = useState({
+    bankName: '',
+    accountHolderName: '',
+    accountNumber: '',
+    confirmAccountNumber: '',
+    ifscCode: '',
+    accountType: 'Savings',
+    label: '',
+    panCard: '',
+    mobileNumber: '',
+    emailId: '',
+    initialBalance: ''
+  });
+
+  const [errors, setErrors] = useState({});
+  const [step, setStep] = useState(1);
+
+  const bankOptions = [
+    'HDFC Bank', 'SBI Bank', 'ICICI Bank', 'Axis Bank', 'Punjab National Bank',
+    'Bank of Baroda', 'Canara Bank', 'Union Bank of India', 'IDFC FIRST Bank', 'Yes Bank'
+  ];
+
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const validateStep1 = () => {
+    const newErrors = {};
+    
+    if (!formData.bankName) newErrors.bankName = 'Please select a bank';
+    if (!formData.accountHolderName) newErrors.accountHolderName = 'Account holder name is required';
+    if (!formData.accountNumber) newErrors.accountNumber = 'Account number is required';
+    if (formData.accountNumber !== formData.confirmAccountNumber) {
+      newErrors.confirmAccountNumber = 'Account numbers do not match';
+    }
+    if (!formData.ifscCode) newErrors.ifscCode = 'IFSC code is required';
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateStep2 = () => {
+    const newErrors = {};
+    
+    if (!formData.panCard) {
+      newErrors.panCard = 'PAN card is required';
+    } else if (!validatePAN(formData.panCard)) {
+      newErrors.panCard = 'Invalid PAN card format (e.g., ABCDE1234F)';
+    }
+    
+    if (!formData.mobileNumber) {
+      newErrors.mobileNumber = 'Mobile number is required';
+    } else if (!/^[+]?[0-9]{10,15}$/.test(formData.mobileNumber.replace(/\s/g, ''))) {
+      newErrors.mobileNumber = 'Invalid mobile number';
+    }
+    
+    if (!formData.emailId) {
+      newErrors.emailId = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.emailId)) {
+      newErrors.emailId = 'Invalid email format';
+    }
+
+    if (!formData.initialBalance) {
+      newErrors.initialBalance = 'Initial balance is required';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleNext = () => {
+    if (step === 1 && validateStep1()) {
+      setStep(2);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (validateStep2()) {
+      const newAccount = {
+        id: Date.now(),
+        bankName: formData.bankName,
+        accountNumber: `****${formData.accountNumber.slice(-4)}`,
+        fullAccountNumber: formData.accountNumber,
+        ifscCode: formData.ifscCode,
+        accountType: formData.accountType,
+        balance: parseInt(formData.initialBalance),
+        label: formData.label || `${formData.accountType} Account`,
+        isPrimary: false,
+        lastUpdated: new Date(),
+        lowBalanceAlert: 1000,
+        panCard: formData.panCard,
+        accountHolderName: formData.accountHolderName,
+        mobileNumber: formData.mobileNumber,
+        emailId: formData.emailId
+      };
+      
+      onAddAccount(newAccount);
+      handleClose();
+    }
+  };
+
+  const handleClose = () => {
+    setFormData({
+      bankName: '',
+      accountHolderName: '',
+      accountNumber: '',
+      confirmAccountNumber: '',
+      ifscCode: '',
+      accountType: 'Savings',
+      label: '',
+      panCard: '',
+      mobileNumber: '',
+      emailId: '',
+      initialBalance: ''
+    });
+    setErrors({});
+    setStep(1);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Add Bank Account</h2>
+              <p className="text-gray-600">Step {step} of 2</p>
+            </div>
+            <button
+              onClick={handleClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          
+          {/* Progress Bar */}
+          <div className="mt-4">
+            <div className="flex items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+              }`}>1</div>
+              <div className={`flex-1 h-2 mx-2 rounded ${
+                step >= 2 ? 'bg-blue-600' : 'bg-gray-200'
+              }`}></div>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+              }`}>2</div>
+            </div>
+            <div className="flex justify-between text-sm text-gray-600 mt-2">
+              <span>Bank Details</span>
+              <span>Personal Info</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {step === 1 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Bank Account Details</h3>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Bank *</label>
+                <select
+                  value={formData.bankName}
+                  onChange={(e) => handleInputChange('bankName', e.target.value)}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.bankName ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Choose your bank</option>
+                  {bankOptions.map(bank => (
+                    <option key={bank} value={bank}>{bank}</option>
+                  ))}
+                </select>
+                {errors.bankName && <p className="text-red-500 text-xs mt-1">{errors.bankName}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Account Holder Name *</label>
+                <input
+                  type="text"
+                  value={formData.accountHolderName}
+                  onChange={(e) => handleInputChange('accountHolderName', e.target.value)}
+                  placeholder="As per bank records"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.accountHolderName ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                />
+                {errors.accountHolderName && <p className="text-red-500 text-xs mt-1">{errors.accountHolderName}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Account Number *</label>
+                <input
+                  type="text"
+                  value={formData.accountNumber}
+                  onChange={(e) => handleInputChange('accountNumber', e.target.value)}
+                  placeholder="Enter your account number"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.accountNumber ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                />
+                {errors.accountNumber && <p className="text-red-500 text-xs mt-1">{errors.accountNumber}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Account Number *</label>
+                <input
+                  type="text"
+                  value={formData.confirmAccountNumber}
+                  onChange={(e) => handleInputChange('confirmAccountNumber', e.target.value)}
+                  placeholder="Re-enter account number"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.confirmAccountNumber ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                />
+                {errors.confirmAccountNumber && <p className="text-red-500 text-xs mt-1">{errors.confirmAccountNumber}</p>}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">IFSC Code *</label>
+                  <input
+                    type="text"
+                    value={formData.ifscCode}
+                    onChange={(e) => handleInputChange('ifscCode', e.target.value.toUpperCase())}
+                    placeholder="e.g., HDFC0001234"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.ifscCode ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {errors.ifscCode && <p className="text-red-500 text-xs mt-1">{errors.ifscCode}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Account Type *</label>
+                  <select
+                    value={formData.accountType}
+                    onChange={(e) => handleInputChange('accountType', e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="Savings">Savings</option>
+                    <option value="Current">Current</option>
+                    <option value="Salary">Salary</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Account Label (Optional)</label>
+                <input
+                  type="text"
+                  value={formData.label}
+                  onChange={(e) => handleInputChange('label', e.target.value)}
+                  placeholder="e.g., Salary Account, Business Account"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information & Verification</h3>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">PAN Card Number *</label>
+                <input
+                  type="text"
+                  value={formData.panCard}
+                  onChange={(e) => handleInputChange('panCard', e.target.value.toUpperCase())}
+                  placeholder="ABCDE1234F"
+                  maxLength={10}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.panCard ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                />
+                {errors.panCard && <p className="text-red-500 text-xs mt-1">{errors.panCard}</p>}
+                <p className="text-gray-500 text-xs mt-1">Required for KYC verification</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number *</label>
+                  <input
+                    type="tel"
+                    value={formData.mobileNumber}
+                    onChange={(e) => handleInputChange('mobileNumber', e.target.value)}
+                    placeholder="+91 9876543210"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.mobileNumber ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {errors.mobileNumber && <p className="text-red-500 text-xs mt-1">{errors.mobileNumber}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email ID *</label>
+                  <input
+                    type="email"
+                    value={formData.emailId}
+                    onChange={(e) => handleInputChange('emailId', e.target.value)}
+                    placeholder="john.doe@example.com"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.emailId ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {errors.emailId && <p className="text-red-500 text-xs mt-1">{errors.emailId}</p>}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Initial Balance *</label>
+                <input
+                  type="number"
+                  value={formData.initialBalance}
+                  onChange={(e) => handleInputChange('initialBalance', e.target.value)}
+                  placeholder="25000"
+                  min="0"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.initialBalance ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                />
+                {errors.initialBalance && <p className="text-red-500 text-xs mt-1">{errors.initialBalance}</p>}
+                <p className="text-gray-500 text-xs mt-1">Current balance in this account</p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <Shield className="w-5 h-5 text-blue-600 mt-0.5 mr-2" />
+                  <div>
+                    <h4 className="font-medium text-blue-900">Security & Privacy</h4>
+                    <p className="text-blue-700 text-sm mt-1">
+                      Your banking information is encrypted and securely stored. We use bank-grade security measures to protect your data.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 border-t border-gray-200">
+          <div className="flex justify-between">
+            {step === 1 ? (
+              <button
+                onClick={handleClose}
+                className="px-6 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            ) : (
+              <button
+                onClick={() => setStep(1)}
+                className="px-6 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Back
+              </button>
+            )}
+
+            {step === 1 ? (
+              <button
+                onClick={handleNext}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+              >
+                Next Step
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
+              >
+                <Check className="w-4 h-4 mr-2" />
+                Add Account
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Onboarding Tutorial Modal
+const OnboardingModal = ({ isOpen, onClose }) => {
+  const [currentStep, setCurrentStep] = useState(0);
+
+  const steps = [
+    {
+      title: "Welcome to TrackPay Pro! 🎉",
+      content: (
+        <div className="text-center">
+          <div className="text-6xl mb-4">💳</div>
+          <p className="text-gray-600 text-lg mb-4">
+            Your all-in-one financial tracking platform
+          </p>
+          <p className="text-gray-500">
+            Track transactions across multiple banks, UPI apps, and payment methods in one unified dashboard.
+          </p>
+        </div>
+      )
+    },
+    {
+      title: "Add Your Bank Accounts 🏦",
+      content: (
+        <div className="text-center">
+          <div className="text-6xl mb-4">🏦</div>
+          <p className="text-gray-600 text-lg mb-4">
+            Connect all your bank accounts securely
+          </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
+            <h4 className="font-semibold text-blue-900 mb-2">You can add:</h4>
+            <ul className="text-blue-700 text-sm space-y-1">
+              <li>• Savings & Current accounts</li>
+              <li>• Multiple banks (HDFC, SBI, ICICI, etc.)</li>
+              <li>• Custom labels for easy identification</li>
+              <li>• Set primary account for default operations</li>
+            </ul>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Smart Transaction Tracking 🧠",
+      content: (
+        <div className="text-center">
+          <div className="text-6xl mb-4">🧠</div>
+          <p className="text-gray-600 text-lg mb-4">
+            AI-powered transaction analysis
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <h4 className="font-semibold text-purple-900 mb-1">UPI Detection</h4>
+              <p className="text-purple-700 text-sm">Auto-detects Google Pay, PhonePe, Paytm</p>
+            </div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <h4 className="font-semibold text-green-900 mb-1">Smart Categories</h4>
+              <p className="text-green-700 text-sm">Salary, refunds, recurring payments</p>
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Dashboard Analytics 📊",
+      content: (
+        <div className="text-center">
+          <div className="text-6xl mb-4">📊</div>
+          <p className="text-gray-600 text-lg mb-4">
+            Comprehensive financial insights
+          </p>
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 text-left">
+            <h4 className="font-semibold text-blue-900 mb-2">Get insights on:</h4>
+            <ul className="text-blue-700 text-sm space-y-1">
+              <li>• Income vs Expenses trends</li>
+              <li>• Category-wise spending breakdown</li>
+              <li>• Account-wise performance</li>
+              <li>• UPI app usage analytics</li>
+              <li>• Monthly, weekly, yearly comparisons</li>
+            </ul>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Security & Privacy 🛡️",
+      content: (
+        <div className="text-center">
+          <div className="text-6xl mb-4">🛡️</div>
+          <p className="text-gray-600 text-lg mb-4">
+            Bank-grade security for your data
+          </p>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-left">
+            <h4 className="font-semibold text-green-900 mb-2">We ensure:</h4>
+            <ul className="text-green-700 text-sm space-y-1">
+              <li>• 256-bit encryption for all data</li>
+              <li>• PAN card verification for KYC</li>
+              <li>• Balance visibility controls</li>
+              <li>• Secure account management</li>
+              <li>• No data sharing with third parties</li>
+            </ul>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Ready to Get Started! 🚀",
+      content: (
+        <div className="text-center">
+          <div className="text-6xl mb-4">🚀</div>
+          <p className="text-gray-600 text-lg mb-4">
+            You're all set to track your finances like a pro!
+          </p>
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-4">
+            <h4 className="font-semibold text-gray-900 mb-2">Next Steps:</h4>
+            <div className="text-gray-700 text-sm space-y-2 text-left">
+              <div className="flex items-center">
+                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs mr-3">1</div>
+                Go to Profile page and add your first bank account
+              </div>
+              <div className="flex items-center">
+                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs mr-3">2</div>
+                View your dashboard for financial insights
+              </div>
+              <div className="flex items-center">
+                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs mr-3">3</div>
+                Explore transactions with smart filtering
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+  ];
+
+  const handleNext = () => {
+    if (currentStep < steps.length - 1) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleClose = () => {
+    setCurrentStep(0);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">{steps[currentStep].title}</h2>
+              <p className="text-gray-600 text-sm">Step {currentStep + 1} of {steps.length}</p>
+            </div>
+            <button
+              onClick={handleClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          
+          {/* Progress Bar */}
+          <div className="mt-4">
+            <div className="flex space-x-1">
+              {steps.map((_, index) => (
+                <div
+                  key={index}
+                  className={`flex-1 h-2 rounded ${
+                    index <= currentStep ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                ></div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {steps[currentStep].content}
+        </div>
+
+        <div className="p-6 border-t border-gray-200">
+          <div className="flex justify-between">
+            <button
+              onClick={handlePrev}
+              disabled={currentStep === 0}
+              className={`px-6 py-2 rounded-lg transition-colors ${
+                currentStep === 0
+                  ? 'text-gray-400 cursor-not-allowed'
+                  : 'text-gray-600 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Previous
+            </button>
+
+            {currentStep === steps.length - 1 ? (
+              <button
+                onClick={handleClose}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center"
+              >
+                <Check className="w-4 h-4 mr-2" />
+                Get Started
+              </button>
+            ) : (
+              <button
+                onClick={handleNext}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+              >
+                Next
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Navigation Component
-const Navigation = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen }) => {
+const Navigation = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen, showOnboarding }) => {
   const location = useLocation();
   
   const menuItems = [
@@ -166,7 +808,7 @@ const Navigation = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenu
           </div>
           
           {/* Desktop Navigation */}
-          <div className="hidden md:flex space-x-8">
+          <div className="hidden md:flex items-center space-x-8">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
@@ -185,6 +827,14 @@ const Navigation = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenu
                 </Link>
               );
             })}
+            
+            <button
+              onClick={showOnboarding}
+              className="flex items-center px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              <PlayCircle className="w-4 h-4 mr-2" />
+              Tutorial
+            </button>
           </div>
 
           {/* Mobile menu button */}
@@ -220,6 +870,16 @@ const Navigation = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenu
                 </Link>
               );
             })}
+            <button
+              onClick={() => {
+                showOnboarding();
+                setIsMobileMenuOpen(false);
+              }}
+              className="flex items-center px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors w-full text-left"
+            >
+              <PlayCircle className="w-4 h-4 mr-3" />
+              Tutorial
+            </button>
           </div>
         )}
       </div>
@@ -979,6 +1639,10 @@ const Profile = ({ bankAccounts, setBankAccounts }) => {
     setBalanceVisibility(prev => ({ ...prev, [accountId]: !prev[accountId] }));
   };
 
+  const handleAddAccount = (newAccount) => {
+    setBankAccounts(prev => [...prev, newAccount]);
+  };
+
   const totalBalance = bankAccounts.reduce((sum, account) => sum + account.balance, 0);
   const lowBalanceAccounts = bankAccounts.filter(account => account.balance <= account.lowBalanceAlert);
 
@@ -1254,6 +1918,13 @@ const Profile = ({ bankAccounts, setBankAccounts }) => {
             </button>
           </div>
         </div>
+
+        {/* Add Account Modal */}
+        <AddAccountModal
+          isOpen={showAddAccount}
+          onClose={() => setShowAddAccount(false)}
+          onAddAccount={handleAddAccount}
+        />
       </div>
     </div>
   );
@@ -1265,14 +1936,34 @@ const App = () => {
   const [bankAccounts, setBankAccounts] = useState([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isFirstTime, setIsFirstTime] = useState(true);
 
   useEffect(() => {
     setTimeout(() => {
       setTransactions(generateDummyTransactions());
       setBankAccounts(generateBankAccounts());
       setIsLoading(false);
+      
+      // Show onboarding for first-time users
+      const hasSeenOnboarding = localStorage.getItem('trackpay_onboarding_seen');
+      if (!hasSeenOnboarding) {
+        setShowOnboarding(true);
+        setIsFirstTime(true);
+      }
     }, 1000);
   }, []);
+
+  const handleCloseOnboarding = () => {
+    setShowOnboarding(false);
+    localStorage.setItem('trackpay_onboarding_seen', 'true');
+    setIsFirstTime(false);
+  };
+
+  const handleShowOnboarding = () => {
+    setShowOnboarding(true);
+    setIsFirstTime(false);
+  };
 
   if (isLoading) {
     return (
@@ -1292,12 +1983,19 @@ const App = () => {
         <Navigation 
           isMobileMenuOpen={isMobileMenuOpen}
           setIsMobileMenuOpen={setIsMobileMenuOpen}
+          showOnboarding={handleShowOnboarding}
         />
         <Routes>
           <Route path="/" element={<Dashboard transactions={transactions} bankAccounts={bankAccounts} />} />
           <Route path="/transactions" element={<Transactions transactions={transactions} setTransactions={setTransactions} bankAccounts={bankAccounts} />} />
           <Route path="/profile" element={<Profile bankAccounts={bankAccounts} setBankAccounts={setBankAccounts} />} />
         </Routes>
+
+        {/* Onboarding Modal */}
+        <OnboardingModal
+          isOpen={showOnboarding}
+          onClose={handleCloseOnboarding}
+        />
       </div>
     </Router>
   );
